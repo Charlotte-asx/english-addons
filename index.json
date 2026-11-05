@@ -5,11 +5,11 @@
       "enabled": true,
       "version": 2,
       "script": "yoturkish.js",
-      "name": "Delta",
+      "name": "yoturkish",
       "base": "https://yoturkish.to",
       "idx": 0,
       "desc": "Series Turcas",
-      "category": "movies",
+      "category": "turkas",
       "color": "#536DFE"
     }
   }
