@@ -11,6 +11,18 @@
       "desc": "Series Turcas",
       "category": "turcas",
       "color": "#536DFE"
+    },
+     "streamingunity": {
+  "enabled": true,
+  "version": 1,
+  "script": "streamingunity.js",
+  "name": "StreamingUnity",
+  "base": "https://streamingunity.fun",
+  "idx": 9,
+  "desc": "Peliculas y Series",
+  "category": "movies",
+  "paginated": true,
+  "color": "#E50914"
     }
   }
 }
