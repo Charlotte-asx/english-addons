@@ -1,14 +1,14 @@
 {
   "enabled": true,
    "servers": {
-    "delta": {
+    "yoturkish": {
       "enabled": true,
       "version": 2,
-      "script": "delta.js",
+      "script": "yoturkish.js",
       "name": "Delta",
-      "base": "https://www.cuevana3.eu",
+      "base": "https://yoturkish.to",
       "idx": 0,
-      "desc": "Movies y Series",
+      "desc": "Series Turcas",
       "category": "movies",
       "color": "#536DFE"
     }
