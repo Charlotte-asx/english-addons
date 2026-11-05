@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+   "servers": {
+    "delta": {
+      "enabled": true,
+      "version": 2,
+      "script": "delta.js",
+      "name": "Delta",
+      "base": "https://www.cuevana3.eu",
+      "idx": 0,
+      "desc": "Movies y Series",
+      "category": "movies",
+      "color": "#536DFE"
+    }
+  }
+}
