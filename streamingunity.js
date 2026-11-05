@@ -1,11 +1,15 @@
 /*
  * StreamingUnity — streamingunity.fun · Películas y Series
  * Funciones: list(page) · search(query, page) · detail(url) · servers(episodeUrl)
- * El servidor de video real está embebido vía iframe apuntando a vixcloud.cc.
+ *
+ * La web es Inertia.js: el HTML llega casi vacío y todos los datos están en el
+ * atributo data-page="{...json...}" del <div id="app">. Por eso el parseo por
+ * regex de tarjetas HTML no encontraba nada. Aquí se lee ese JSON.
  */
 
-// La base viene del index.json (campo "base").
 var BASE = String(CONFIG.base || "https://streamingunity.fun").replace(/\/+$/, "");
+var CDN = "https://cdn.streamingunity.fun";
+var PAGE_SIZE = 60;
 
 function clean(s) {
     return util.htmlDecode(String(s || ""))
@@ -14,61 +18,58 @@ function clean(s) {
         .replace(/^\s+|\s+$/g, "");
 }
 
-function abs(u) {
-    u = String(u || "");
-    if (!u) return "";
-    if (/^https?:/i.test(u)) return u;
-    if (u.indexOf("//") === 0) return "https:" + u;
-    return BASE + (u.charAt(0) === "/" ? "" : "/") + u;
-}
-
-// Extrae el ID numérico del título desde la URL (ej: /en/titles/66502-the-greatest -> 66502)
-function getTitleId(url) {
-    var m = /\/(?:titles|watch)\/(\d+)/.exec(url);
-    return m ? m[1] : null;
-}
-
 function get(url, referer) {
     var headers = {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9,es;q=0.8",
         "Referer": referer || (BASE + "/")
     };
     var h = http.get(url, headers);
     if (!h) throw new Error("Sin respuesta (HTTP " + http.status() + ") de " + url);
-    return h.replace(/[\r\n]+/g, "");
+    return h;
 }
 
-function parseCardList(html) {
-    var out = [];
-    if (!html) return out;
-    
-    // En la búsqueda y archivo, las tarjetas suelen tener la clase "ssr-title-card" o "movie-card"
-    var m, cre = /<div[^>]*class="[^"]*(?:ssr-title-card|movie-card)[^"]*"[^>]*>([\s\S]*?)(?=<div[^>]*class="[^"]*(?:ssr-title-card|movie-card)|$)/g;
-    
-    while ((m = cre.exec(html)) !== null) {
-        var block = m[1];
-        // Buscar el enlace al título
-        var um = /href="((?:https?:\/\/[^"\/]+)?\/(?:en\/)?titles\/[^"]+)"/.exec(block);
-        if (!um) continue;
-        
-        var url = abs(um[1]);
-        var id = getTitleId(url);
-        if (!id) continue;
+// Lee el JSON de Inertia (data-page) y devuelve props
+function getProps(html) {
+    var m = /data-page="([^"]*)"/.exec(html);
+    if (!m) return null;
+    try {
+        var data = JSON.parse(util.htmlDecode(m[1]));
+        return data.props || null;
+    } catch (e) {
+        log("StreamingUnity: error parseando data-page: " + e);
+        return null;
+    }
+}
 
-        // Buscar imagen (suele estar en el style del div o en un img)
-        var im = /url\((https:\/\/cdn\.streamingunity\.fun\/images\/[^)]+)\)/.exec(block) || /<img[^>]*src="(https:\/\/cdn\.streamingunity\.fun\/images\/[^"]+)"/.exec(block);
-        
-        // Buscar título (h3 o el alt de la imagen)
-        var tm = /<h3[^>]*>([^<]+)<\/h3>/.exec(block) || /alt="([^"]+)"/.exec(block);
-        
-        // Determinar si es serie o película (por la URL o por un badge de texto)
-        var isSerie = url.indexOf("/titles/") >= 0 && block.indexOf("TV") >= 0; // Heurística simple
-        
+function getTitleId(url) {
+    var m = /\/(?:titles|watch)\/(\d+)/.exec(String(url || ""));
+    return m ? m[1] : null;
+}
+
+function imgUrl(images, types) {
+    if (!images) return "";
+    for (var t = 0; t < types.length; t++) {
+        for (var i = 0; i < images.length; i++) {
+            if (images[i].type === types[t] && images[i].filename) {
+                return CDN + "/images/" + images[i].filename;
+            }
+        }
+    }
+    return "";
+}
+
+function titlesToCards(titles) {
+    var out = [];
+    if (!titles) return out;
+    for (var i = 0; i < titles.length; i++) {
+        var t = titles[i];
+        if (!t || !t.id) continue;
+        var isSerie = t.type === "tv";
         out.push({
-            url: url,
-            image: im ? im[1] : "",
-            title: tm ? clean(tm[1]) : "Sin título",
+            url: BASE + "/en/titles/" + t.id + "-" + t.slug,
+            image: imgUrl(t.images, ["poster", "cover_mobile", "cover"]),
+            title: clean(t.name),
             type: isSerie ? "Serie" : "Película",
             kind: isSerie ? "serie" : "movie"
         });
@@ -78,105 +79,80 @@ function parseCardList(html) {
 
 function list(page) {
     page = page || 1;
-    // La página de archivo tiene paginación
-    var url = BASE + "/en/archive" + (page > 1 ? "?page=" + page : "");
-    return parseCardList(get(url));
+    var url = BASE + "/en/archive";
+    if (page > 1) url += "?offset=" + ((page - 1) * PAGE_SIZE) + "&page=" + page;
+    var props = getProps(get(url));
+    return props ? titlesToCards(props.titles) : [];
 }
 
 function search(query, page) {
     page = page || 1;
-    var url = BASE + "/en/search?q=" + encodeURIComponent(query) + (page > 1 ? "&page=" + page : "");
-    return parseCardList(get(url));
+    var url = BASE + "/en/search?q=" + encodeURIComponent(query);
+    if (page > 1) url += "&offset=" + ((page - 1) * PAGE_SIZE) + "&page=" + page;
+    var props = getProps(get(url));
+    return props ? titlesToCards(props.titles) : [];
+}
+
+function mapEpisodes(titleId, seasonNumber, eps, tmdb) {
+    var out = [];
+    if (!eps) return out;
+    for (var i = 0; i < eps.length; i++) {
+        var ep = eps[i];
+        out.push({
+            // Se guardan season/episodio en la URL para que servers() los use
+            url: BASE + "/en/watch/" + titleId + "?e=" + ep.id + "&s=" + seasonNumber + "&n=" + ep.number,
+            title: clean(ep.name) || ("Episodio " + ep.number),
+            season: String(seasonNumber),
+            episode: String(ep.number),
+            image: imgUrl(ep.images, ["cover"])
+        });
+    }
+    return out;
 }
 
 function detail(pageUrl) {
     var id = getTitleId(pageUrl);
-    if (!id) throw new Error("No se pudo extraer el ID del título de: " + pageUrl);
+    if (!id) throw new Error("No se pudo extraer el ID de: " + pageUrl);
 
     var html = get(pageUrl);
-    var d = { isSeries: false };
+    var props = getProps(html);
+    if (!props || !props.title) throw new Error("No se encontró data-page en " + pageUrl);
 
-    // Título
-    var m = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(html);
-    if (m) d.title = clean(m[1]);
-
-    // Poster
-    m = /<img[^>]*src="(https:\/\/cdn\.streamingunity\.fun\/images\/[^"]+)"[^>]*class="[^"]*(?:poster|logo)[^"]*"/.exec(html);
-    if (!m) m = /<meta property="og:image" content="([^"]+)"/.exec(html);
-    if (m) d.poster = m[1];
-
-    // Año
-    m = /<span[^>]*>(\d{4})<\/span>/.exec(html);
-    if (m) d.year = m[1];
-
-    // Sinopsis
-    m = /<p[^>]*>([\s\S]*?)<\/p>/.exec(html); // Buscar una descripción larga
-    if (m) d.synopsis = clean(m[1]);
-
-    // Detectar si es serie
-    var isTv = html.indexOf('"type":"tv"') >= 0 || html.indexOf('"seasons_count"') >= 0;
-    d.isSeries = isTv;
+    var t = props.title;
+    var d = {
+        title: clean(t.name),
+        poster: imgUrl(t.images, ["poster", "cover_mobile", "cover"]),
+        year: t.release_date ? String(t.release_date).substring(0, 4) : "",
+        synopsis: clean(t.plot),
+        isSeries: t.type === "tv"
+    };
 
     var episodes = [];
-    
-    if (isTv) {
-        // El HTML contiene un JSON con los episodios. Buscamos los IDs (scws_id)
-        // En el archivo detail.txt vimos la estructura de "seasons" con "episodes" y "scws_id"
-        var seasonMatches = html.match(/"number":\d+[\s\S]*?"episodes":\[[\s\S]*?\]/g);
-        
-        if (seasonMatches) {
-            // Parseamos el JSON de la página (data-page) para obtener los episodios de forma fiable
-            var pageDataMatch = /data-page="([^"]+)"/.exec(html);
-            if (pageDataMatch) {
+    if (d.isSeries) {
+        var seasons = t.seasons || [];
+        var loaded = props.loadedSeason;
+        for (var i = 0; i < seasons.length; i++) {
+            var s = seasons[i];
+            var eps = null;
+            if (loaded && loaded.number === s.number && loaded.episodes) {
+                eps = loaded.episodes;
+            } else {
                 try {
-                    // El HTML tiene entidades, hay que decodificarlas
-                    var jsonStr = util.htmlDecode(pageDataMatch[1]);
-                    var pageData = JSON.parse(jsonStr);
-                    
-                    if (pageData.props && pageData.props.loadedSeason && pageData.props.loadedSeason.episodes) {
-                        var eps = pageData.props.loadedSeason.episodes;
-                        for (var i = 0; i < eps.length; i++) {
-                            var ep = eps[i];
-                            episodes.push({
-                                url: pageUrl + "#s" + ep.season_id + "-e" + ep.number, // URL ficticia para identificar
-                                title: "T" + (i+1) + " - " + ep.name,
-                                season: String(i+1), // Usamos el índice como temporada si no hay número claro
-                                episode: String(ep.number),
-                                image: ep.images && ep.images[0] ? "https://cdn.streamingunity.fun/images/" + ep.images[0].filename : "",
-                                _scws_id: ep.scws_id // Guardamos el ID real para servers()
-                            });
-                        }
-                    }
+                    var sp = getProps(get(BASE + "/en/titles/" + id + "-" + t.slug + "/season-" + s.number, pageUrl));
+                    if (sp && sp.loadedSeason) eps = sp.loadedSeason.episodes;
                 } catch (e) {
-                    log("Error parseando JSON de episodios: " + e);
+                    log("StreamingUnity: fallo temporada " + s.number + ": " + e);
                 }
             }
-        }
-        
-        // Si no encontramos episodios por JSON, intentamos con el HTML (fallback)
-        if (episodes.length === 0) {
-            // Buscar enlaces a /watch/ que son episodios
-            var re = /href="([^"]*\/watch\/\d+[^"]*)"[^>]*>[\s\S]*?<span[^>]*>([^<]*)<\/span>/g;
-            while ((m = re.exec(html)) !== null) {
-                episodes.push({
-                    url: abs(m[1]),
-                    title: clean(m[2]) || "Episodio",
-                    season: "1",
-                    episode: String(episodes.length + 1),
-                    image: "",
-                    _scws_id: null // Se extraerá en servers
-                });
-            }
+            episodes = episodes.concat(mapEpisodes(id, s.number, eps));
         }
     } else {
-        // Película
         episodes.push({
-            url: pageUrl,
+            url: BASE + "/en/watch/" + id,
             title: "Película Completa",
             season: "1",
             episode: "1",
-            image: d.poster || "",
-            _scws_id: null // Se extraerá en servers
+            image: d.poster
         });
     }
 
@@ -185,60 +161,41 @@ function detail(pageUrl) {
 }
 
 function servers(episodeUrl) {
-    var titleId = getTitleId(episodeUrl);
-    if (!titleId) {
-        log("StreamingUnity: No se pudo obtener el ID del título de " + episodeUrl);
-        return [];
-    }
+    var id = getTitleId(episodeUrl);
+    if (!id) return [];
 
-    // Determinar si es película o serie para la URL de watch
-    // El servidor siempre es el mismo endpoint /watch/{id} y luego se extrae el iframe
-    var watchUrl = BASE + "/en/watch/" + titleId;
-    
-    // Si es un episodio específico, podemos intentar añadir el parámetro de episodio si la web lo soporta
-    // En StreamingUnity, el watch suele cargar el primer episodio o el seleccionado vía JS.
-    // Para simplificar, cargamos el watch del título y buscamos el iframe de vixcloud.
-    
-    var html = get(watchUrl, episodeUrl);
+    var watchUrl = BASE + "/en/watch/" + id;
+    var q = /\?(.*)$/.exec(episodeUrl);
+    var qs = q ? "?" + q[1].replace(/#.*$/, "") : "";
     var out = [];
 
-    // Buscar el iframe de vixcloud en el HTML
-    // En el archivo detail.txt vimos que la preview tiene un embed_url con token.
-    // En el watch, el reproductor debería estar en un iframe.
-    var m = /<iframe[^>]*src="([^"]*vixcloud\.cc[^"]*)"/.exec(html);
-    
-    if (m) {
-        var iframeUrl = m[1];
-        // El iframe de vixcloud a veces tiene el token en la URL, lo usamos directamente
-        // Como el reproductor es el mismo, solo devolvemos esa URL como "servidor"
-        out.push({
-            url: iframeUrl,
-            name: "VixCloud",
-            referer: watchUrl
-        });
-    } else {
-        // Plan B: buscar el embed_url en el JSON de la página
-        var pageDataMatch = /data-page="([^"]+)"/.exec(html);
-        if (pageDataMatch) {
-            try {
-                var jsonStr = util.htmlDecode(pageDataMatch[1]);
-                var pageData = JSON.parse(jsonStr);
-                if (pageData.props && pageData.props.title && pageData.props.title.preview && pageData.props.title.preview.embed_url) {
-                    out.push({
-                        url: pageData.props.title.preview.embed_url,
-                        name: "VixCloud",
-                        referer: watchUrl
-                    });
-                }
-            } catch (e) {
-                log("Error parseando JSON para servidores: " + e);
-            }
+    // 1) Intentar sacar el iframe/embed real de la página watch (HTML o data-page)
+    try {
+        var html = get(watchUrl + qs, BASE + "/");
+        var m = /<iframe[^>]*src="([^"]*vixcloud\.cc[^"]*)"/.exec(html);
+        if (!m) {
+            var decoded = util.htmlDecode((/data-page="([^"]*)"/.exec(html) || [])[1] || "").replace(/\\\//g, "/");
+            m = /(https:\/\/vixcloud\.cc\/(?:embed|playlist)\/[^"\s\\]+)/.exec(decoded);
         }
+        if (m) {
+            out.push({ url: util.htmlDecode(m[1]), name: "VixCloud", referer: watchUrl });
+            return out;
+        }
+
+        // 2) Fallback: vixsrc.to con el tmdb_id (películas y series)
+        var props = getProps(html);
+        var tmdb = props && props.title ? props.title.tmdb_id : null;
+        if (tmdb) {
+            var s = /[?&]s=(\d+)/.exec(qs), n = /[?&]n=(\d+)/.exec(qs);
+            var u = (s && n)
+                ? "https://vixsrc.to/tv/" + tmdb + "/" + s[1] + "/" + n[1]
+                : "https://vixsrc.to/movie/" + tmdb;
+            out.push({ url: u, name: "VixSrc", referer: watchUrl });
+        }
+    } catch (e) {
+        log("StreamingUnity servers error: " + e);
     }
 
-    if (out.length === 0) {
-        log("StreamingUnity: No se encontró el iframe de vixcloud en " + watchUrl);
-    }
-
+    if (out.length === 0) log("StreamingUnity: sin servidor para " + episodeUrl);
     return out;
-      }
+}
