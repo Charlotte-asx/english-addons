@@ -11,7 +11,8 @@
       "idx": 0,
       "desc": "Series Turcas",
       "category": "turcas",
-      "color": "#536DFE"
+      "color": "#536DFE",
+      "icon": "https://raw.githubusercontent.com/Charlotte-asx/english-addons/refs/heads/main/Icons/1794033688660.jpg"
     },
      "streamingunity": {
   "enabled": true,
@@ -23,7 +24,8 @@
   "desc": "Peliculas y Series",
   "category": "movies",
   "paginated": true,
-  "color": "#E50914"
+  "color": "#E50914",
+       "icon": "https://raw.githubusercontent.com/Charlotte-asx/english-addons/refs/heads/main/Icons/1794033893902.jpg"
     }
   }
 }
