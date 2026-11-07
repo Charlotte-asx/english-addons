@@ -1,31 +1,31 @@
 {
   "enabled": true,
   "icon": "https://raw.githubusercontent.com/Charlotte-asx/english-addons/refs/heads/main/Icons/0e6c3fa1ccbd.png",
-   "servers": {
+  "servers": {
     "yoturkish": {
       "enabled": true,
       "version": 2,
       "script": "yoturkish.js",
-      "name": "yoturkish",
+      "name": "YoTurkish",
       "base": "https://yoturkish.to",
       "idx": 0,
-      "desc": "Series Turcas",
+      "desc": "Turkish TV Series",
       "category": "turcas",
       "color": "#536DFE",
       "icon": "https://raw.githubusercontent.com/Charlotte-asx/english-addons/refs/heads/main/Icons/1794033688660.jpg"
     },
-     "streamingunity": {
-  "enabled": true,
-  "version": 1,
-  "script": "streamingunity.js",
-  "name": "StreamingUnity",
-  "base": "https://streamingunity.fun",
-  "idx": 9,
-  "desc": "Peliculas y Series",
-  "category": "movies",
-  "paginated": true,
-  "color": "#E50914",
-       "icon": "https://raw.githubusercontent.com/Charlotte-asx/english-addons/refs/heads/main/Icons/1794033893902.jpg"
+    "streamingunity": {
+      "enabled": true,
+      "version": 1,
+      "script": "streamingunity.js",
+      "name": "StreamingUnity",
+      "base": "https://streamingunity.fun",
+      "idx": 1,
+      "desc": "Movies and TV Shows",
+      "category": "movies",
+      "paginated": true,
+      "color": "#E50914",
+      "icon": "https://raw.githubusercontent.com/Charlotte-asx/english-addons/refs/heads/main/Icons/1794033893902.jpg"
     }
   }
 }
