@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "icon": "https://raw.githubusercontent.com/Charlotte-asx/chinese-addons/refs/heads/main/Icons/0e6c3fa1ccbd.png"
+  "icon": "https://raw.githubusercontent.com/Charlotte-asx/chinese-addons/refs/heads/main/Icons/0e6c3fa1ccbd.png",
    "servers": {
     "yoturkish": {
       "enabled": true,
